@@ -1,160 +1,151 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>Apex Focus - Core Engine</title>
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    
-    <script>
-      // The Brain of the Game: Handles movement, scoring, levels, and collisions
-      AFRAME.registerComponent('game-manager', {
-        schema: { maxSpeed: { default: 0.4 } },
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Neon Apex - VR</title>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
+  
+  <style>
+    /* Dark, Glassmorphism UI */
+    body { margin: 0; overflow: hidden; background-color: #050505; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); }
+    .glass-panel { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.3); border-radius: 15px; padding: 40px; text-align: center; width: 80%; max-width: 400px; box-shadow: 0 4px 30px rgba(0, 255, 255, 0.1); }
+    h1 { margin-top: 0; color: #0ff; text-shadow: 0 0 10px #0ff; }
+    button { background: transparent; color: #0ff; border: 1px solid #0ff; padding: 10px 20px; font-size: 1.2rem; cursor: pointer; border-radius: 5px; margin-top: 20px; transition: all 0.3s; }
+    button:hover { background: rgba(0, 255, 255, 0.2); box-shadow: 0 0 15px #0ff; }
+    .hidden { display: none !important; }
+    label, select { display: block; margin: 15px auto; font-size: 1.1rem; }
+  </style>
+
+  <script>
+    // Custom Component: Gaze-based Steering
+    // Translates head rotation (looking left/right) into X-axis movement
+    AFRAME.registerComponent('gaze-steering', {
+      tick: function () {
+        let cameraRot = this.el.sceneEl.camera.el.getAttribute('rotation');
+        // Multiply by a factor to control steering sensitivity
+        let targetX = -cameraRot.y * 0.15; 
         
-        init: function () {
-          this.score = 0;
-          this.level = 1;
-          this.speed = 0;
-          this.isFocused = false;
-          this.isCrashed = false;
-          
-          // Grab our UI and Audio elements
-          this.scoreboard = document.querySelector('#scoreboard');
-          this.crashSound = document.querySelector('#sound-crash');
-          this.level2 = document.querySelector('#level-2-environment');
-          
-          const cursor = document.querySelector('#gaze');
-
-          // Gaze Logic (Look at the line to go)
-          cursor.addEventListener('mouseenter', (e) => {
-            if (e.detail.intersectedEl.classList.contains('racing-line')) {
-              this.isFocused = true;
-              cursor.setAttribute('color', '#ffffff');
-            }
-          });
-
-          cursor.addEventListener('mouseleave', () => {
-            this.isFocused = false;
-            cursor.setAttribute('color', '#ff0044');
-          });
-        },
+        // Clamp movement to stay within the tunnel
+        targetX = Math.max(-4, Math.min(4, targetX));
         
-        tick: function () {
-          if (this.isCrashed) return; // Stop moving if crashed
+        let currentPos = this.el.getAttribute('position');
+        this.el.setAttribute('position', { x: targetX, y: currentPos.y, z: currentPos.z });
+      }
+    });
 
-          // 1. Calculate Speed & Score
-          if (this.isFocused) {
-            this.speed = Math.min(this.speed + 0.005, this.data.maxSpeed);
-            this.score += (this.speed * 10); // Score goes up faster at higher speeds
-          } else {
-            this.speed = Math.max(this.speed - 0.015, 0); // Brake when looking away
+    // Custom Component: Collision Handler
+    AFRAME.registerComponent('collision-handler', {
+      init: function () {
+        this.el.addEventListener('collide', function (e) {
+          let hitEntity = e.detail.body.el;
+          if (hitEntity.classList.contains('ring')) {
+            // Update Score
+            let scoreEl = document.querySelector('#scoreText');
+            let currentScore = parseInt(scoreEl.getAttribute('value').split(': ')[1]);
+            scoreEl.setAttribute('value', 'Score: ' + (currentScore + 10));
+            // Play sound and remove ring
+            document.querySelector('#ringSound').components.sound.playSound();
+            hitEntity.parentNode.removeChild(hitEntity);
+          } else if (hitEntity.classList.contains('obstacle')) {
+            // Handle obstacle crash (Reset score or game over)
+            document.querySelector('#crashSound').components.sound.playSound();
+            document.querySelector('#scoreText').setAttribute('value', 'Score: 0');
+            hitEntity.parentNode.removeChild(hitEntity);
           }
+        });
+      }
+    });
 
-          // 2. Move Forward
-          let pos = this.el.getAttribute('position');
-          if (this.speed > 0) {
-            pos.z -= this.speed;
-            this.el.setAttribute('position', pos);
-          }
+    // UI Logic
+    function showSetup() {
+      document.getElementById('flashscreen').classList.add('hidden');
+      document.getElementById('setup').classList.remove('hidden');
+    }
 
-          // 3. Update Scoreboard HUD
-          this.scoreboard.setAttribute('value', `Level: ${this.level} \nSpeed: ${Math.round(this.speed * 100)} MPH\nScore: ${Math.round(this.score)}`);
-
-          // 4. Level Progression Logic
-          // If score passes 2000, trigger Level 2 (Make obstacles visible)
-          if (this.score > 2000 && this.level === 1) {
-            this.level = 2;
-            this.level2.setAttribute('visible', 'true');
-            this.data.maxSpeed = 0.6; // Game gets faster in level 2
-          }
-
-          // 5. Collision Detection
-          // Check distance between player and all obstacles
-          const obstacles = document.querySelectorAll('.obstacle');
-          obstacles.forEach(obs => {
-            let obsPos = obs.getAttribute('position');
-            // Simple 2D distance formula (ignoring height)
-            let dx = pos.x - obsPos.x;
-            let dz = pos.z - obsPos.z;
-            let distance = Math.sqrt(dx * dx + dz * dz);
-            
-            // If we are within 1.5 units of an obstacle, CRASH!
-            if (distance < 1.5 && this.level === 2) {
-              this.handleCrash();
-            }
-          });
-        },
-
-        handleCrash: function () {
-          this.isCrashed = true;
-          this.speed = 0;
-          this.score = Math.max(0, this.score - 500); // Penalty
-          this.scoreboard.setAttribute('value', 'CRASHED!\n-500 Points');
-          this.scoreboard.setAttribute('color', '#ff0000');
-          
-          // Play crash sound
-          this.crashSound.components.sound.playSound();
-
-          // Recover after 2 seconds
-          setTimeout(() => {
-            this.isCrashed = false;
-            this.scoreboard.setAttribute('color', '#00ffcc');
-          }, 2000);
-        }
-      });
-    </script>
-  </head>
-  <body>
-    <a-scene background="color: #030714"> 
+    function startGame() {
+      document.getElementById('ui-layer').classList.add('hidden');
       
-      <a-assets>
-        <audio id="bgm" src="bgm.mp3" preload="auto"></audio>
-        <audio id="engine" src="engine.mp3" preload="auto"></audio>
-        <audio id="crash" src="crash.mp3" preload="auto"></audio>
-      </a-assets>
+      // Handle Setup Choices
+      let mute = document.getElementById('muteAudio').checked;
+      let level = document.getElementById('levelSelect').value;
+      
+      if (!mute) {
+        document.querySelector('#bgMusic').components.sound.playSound();
+      }
 
-      <a-sound src="#bgm" autoplay="true" loop="true" volume="0.3"></a-sound>
+      // Handle Levels (e.g., changing tunnel color and speed based on level)
+      if (level === "2") {
+        document.querySelector('#tunnel').setAttribute('color', '#ff0055'); // Faster/harder visual cue
+        // In a full build, you'd spawn objects faster here
+      }
+    }
+  </script>
+</head>
+<body>
 
-      <a-entity id="rig" position="0 1.6 0" game-manager>
+  <div id="ui-layer">
+    <div id="flashscreen" class="glass-panel">
+      <h1>Neon Apex</h1>
+      <p>A VR Experience by <strong>[Your Name Here]</strong></p>
+      <p>Course/Credentials info here</p>
+      <button onclick="showSetup()">Continue</button>
+    </div>
+
+    <div id="setup" class="glass-panel hidden">
+      <h2>Game Setup</h2>
+      <label><input type="checkbox" id="muteAudio"> Mute Background Music</label>
+      <label>Select Track: 
+        <select id="levelSelect" style="background:#000; color:#0ff; border:1px solid #0ff; padding:5px;">
+          <option value="1">Level 1 (Sector A)</option>
+          <option value="2">Level 2 (Sector B - Faster)</option>
+        </select>
+      </label>
+      <button onclick="startGame()">Enter VR</button>
+    </div>
+  </div>
+
+  <a-scene physics="gravity: 0; debug: false">
+    
+    <a-assets>
+      <img id="shipTexture" src="assets/ship-texture.jpg"> 
+      <img id="ringTexture" src="assets/ring-texture.jpg">
+      <img id="tunnelTexture" src="assets/tunnel-texture.jpg">
+      
+      <audio id="music" src="assets/bg-music.mp3" preload="auto"></audio>
+      <audio id="sfx-ring" src="assets/ring-collect.mp3" preload="auto"></audio>
+      <audio id="sfx-crash" src="assets/crash.mp3" preload="auto"></audio>
+    </a-assets>
+
+    <a-entity id="bgMusic" sound="src: #music; loop: true; volume: 0.5"></a-entity>
+    <a-entity id="ringSound" sound="src: #sfx-ring; volume: 1"></a-entity>
+    <a-entity id="crashSound" sound="src: #sfx-crash; volume: 1"></a-entity>
+
+    <a-entity id="playerRig" position="0 1.6 0" 
+              animation="property: position; to: 0 1.6 -500; dur: 20000; easing: linear; loop: true"
+              gaze-steering collision-handler static-body="shape: sphere; sphereRadius: 0.5">
+      
+      <a-camera position="0 0 0" wasd-controls="enabled: false" look-controls="pointerLockEnabled: false">
         
-        <a-sound src="#engine" autoplay="true" loop="true" volume="0.5"></a-sound>
-        <a-entity id="sound-crash" sound="src: #crash; volume: 1"></a-entity>
-
-        <a-camera position="0 0 0" wasd-controls="enabled: false">
-          
-          <a-text id="scoreboard" 
-                  value="Level: 1 \nSpeed: 0 \nScore: 0" 
-                  position="-1.5 0.8 -2" 
-                  color="#00ffcc" 
-                  font="exo2bold" 
-                  width="4">
-          </a-text>
-
-          <a-entity id="gaze" 
-                    cursor="fuse: false; rayOrigin: entity;"
-                    raycaster="objects: .racing-line"
-                    position="0 0 -1"
-                    geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
-                    material="color: #ff0044; shader: flat; opacity: 0.8">
-          </a-entity>
-        </a-camera>
-      </a-entity>
-
-      <a-entity id="level-1-environment">
-        <a-plane class="racing-line" position="0 0.01 -10" rotation="-90 0 0" width="2" height="30" material="color: #00ffcc; shader: flat; opacity: 0.6; transparent: true"></a-plane>
-        <a-plane class="racing-line" position="-2 0.01 -38" rotation="-90 20 0" width="2" height="30" material="color: #00ffcc; shader: flat; opacity: 0.6; transparent: true"></a-plane>
-        <a-plane class="racing-line" position="-7 0.01 -65" rotation="-90 20 0" width="2" height="30" material="color: #00ffcc; shader: flat; opacity: 0.6; transparent: true"></a-plane>
-      </a-entity>
-
-      <a-entity id="level-2-environment" visible="false">
+        <a-text id="scoreText" value="Score: 0" position="0 1.2 -2" color="#0ff" align="center" width="4"></a-text>
         
-        <a-plane class="racing-line" position="-12 0.01 -92" rotation="-90 20 0" width="2" height="30" material="color: #ff00ff; shader: flat; opacity: 0.6; transparent: true"></a-plane>
-        <a-plane class="racing-line" position="-17 0.01 -119" rotation="-90 20 0" width="2" height="30" material="color: #ff00ff; shader: flat; opacity: 0.6; transparent: true"></a-plane>
+        <a-cone src="#shipTexture" position="0 -0.5 -1.5" rotation="90 0 0" radius-bottom="0.5" radius-top="0" height="1" color="#aaa"></a-cone>
+      </a-camera>
+    </a-entity>
 
-        <a-box class="obstacle" position="-12 1 -85" color="#ff0000" depth="2" height="2" width="2"></a-box>
-        <a-box class="obstacle" position="-16 1 -105" color="#ff0000" depth="2" height="2" width="2"></a-box>
-        
-      </a-entity>
+    <a-cylinder id="tunnel" src="#tunnelTexture" radius="10" height="1000" rotation="90 0 0" position="0 0 -400" side="double" repeat="10 100"></a-cylinder>
 
-    </a-scene>
-  </body>
+    <a-torus class="ring" src="#ringTexture" position="2 1.6 -20" color="#0f0" radius="1.5" tube="0.1" dynamic-body></a-torus>
+    <a-torus class="ring" src="#ringTexture" position="-2 1.6 -40" color="#0f0" radius="1.5" tube="0.1" dynamic-body></a-torus>
+    <a-torus class="ring" src="#ringTexture" position="0 1.6 -60" color="#0f0" radius="1.5" tube="0.1" dynamic-body></a-torus>
+
+    <a-box class="obstacle" position="0 1.6 -30" color="#f00" width="2" height="2" depth="2" dynamic-body></a-box>
+    <a-box class="obstacle" position="2 1.6 -50" color="#f00" width="2" height="2" depth="2" dynamic-body></a-box>
+
+    <a-light type="ambient" color="#222"></a-light>
+    <a-light type="point" color="#0ff" position="0 4 0" intensity="1.5"></a-light>
+
+  </a-scene>
+</body>
 </html>
