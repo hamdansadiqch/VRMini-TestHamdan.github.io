@@ -127,6 +127,7 @@
       <img id="floor-tex" src="floor-texture.jpg">
       <img id="launcher-tex" src="launcher-texture.jpg">
       <img id="ball-tex" src="ball-texture.jpg">
+      <img id="wall-tex" src="wall-texture.jpg">
       
       <audio id="music" src="music.mp3"></audio>
       <audio id="block" src="block.mp3"></audio>
@@ -162,7 +163,13 @@
     <a-box src="#launcher-tex" position="8 0.5 -10" height="3" width="1" depth="1"></a-box>
 
     <a-plane src="#floor-tex" rotation="-90 0 0" width="30" height="30" repeat="10 10"></a-plane>
-    <a-sky color="#222"></a-sky>
+    
+    <a-plane src="#wall-tex" position="0 5 -15" width="30" height="10" repeat="8 3"></a-plane>
+    <a-plane src="#wall-tex" position="0 5 15" width="30" height="10" rotation="0 180 0" repeat="8 3"></a-plane>
+    <a-plane src="#wall-tex" position="-15 5 0" width="30" height="10" rotation="0 90 0" repeat="8 3"></a-plane>
+    <a-plane src="#wall-tex" position="15 5 0" width="30" height="10" rotation="0 -90 0" repeat="8 3"></a-plane>
+
+    <a-sky color="#0a0a0a"></a-sky>
 
   </a-scene>
 </body>
