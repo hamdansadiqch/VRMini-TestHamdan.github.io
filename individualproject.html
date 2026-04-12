@@ -1,150 +1,168 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>Neon Apex - VR</title>
+  <title>VR Dodgeball</title>
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
   
   <style>
-    /* Dark, Glassmorphism UI */
-    body { margin: 0; overflow: hidden; background-color: #050505; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); }
-    .glass-panel { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.3); border-radius: 15px; padding: 40px; text-align: center; width: 80%; max-width: 400px; box-shadow: 0 4px 30px rgba(0, 255, 255, 0.1); }
-    h1 { margin-top: 0; color: #0ff; text-shadow: 0 0 10px #0ff; }
-    button { background: transparent; color: #0ff; border: 1px solid #0ff; padding: 10px 20px; font-size: 1.2rem; cursor: pointer; border-radius: 5px; margin-top: 20px; transition: all 0.3s; }
-    button:hover { background: rgba(0, 255, 255, 0.2); box-shadow: 0 0 15px #0ff; }
+    body { margin: 0; background-color: #111; color: #fff; font-family: sans-serif; }
+    #ui-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #111; }
     .hidden { display: none !important; }
-    label, select { display: block; margin: 15px auto; font-size: 1.1rem; }
+    .panel { text-align: center; border: 2px solid #ff3333; padding: 40px; border-radius: 10px; background: #222; }
+    button { background: #ff3333; color: #fff; border: none; padding: 12px 24px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 1.2rem; }
   </style>
 
   <script>
-    // Custom Component: Gaze-based Steering
-    // Translates head rotation (looking left/right) into X-axis movement
-    AFRAME.registerComponent('gaze-steering', {
-      tick: function () {
-        let cameraRot = this.el.sceneEl.camera.el.getAttribute('rotation');
-        // Multiply by a factor to control steering sensitivity
-        let targetX = -cameraRot.y * 0.15; 
-        
-        // Clamp movement to stay within the tunnel
-        targetX = Math.max(-4, Math.min(4, targetX));
-        
-        let currentPos = this.el.getAttribute('position');
-        this.el.setAttribute('position', { x: targetX, y: currentPos.y, z: currentPos.z });
-      }
-    });
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    let ballSpeed = 4000; // Takes 4 seconds to hit you in Level 1
+    let spawnRate = 2000; // 1 ball every 2 seconds
+    let gameLoop;
 
-    // Custom Component: Collision Handler
-    AFRAME.registerComponent('collision-handler', {
-      init: function () {
-        this.el.addEventListener('collide', function (e) {
-          let hitEntity = e.detail.body.el;
-          if (hitEntity.classList.contains('ring')) {
-            // Update Score
-            let scoreEl = document.querySelector('#scoreText');
-            let currentScore = parseInt(scoreEl.getAttribute('value').split(': ')[1]);
-            scoreEl.setAttribute('value', 'Score: ' + (currentScore + 10));
-            // Play sound and remove ring
-            document.querySelector('#ringSound').components.sound.playSound();
-            hitEntity.parentNode.removeChild(hitEntity);
-          } else if (hitEntity.classList.contains('obstacle')) {
-            // Handle obstacle crash (Reset score or game over)
-            document.querySelector('#crashSound').components.sound.playSound();
-            document.querySelector('#scoreText').setAttribute('value', 'Score: 0');
-            hitEntity.parentNode.removeChild(hitEntity);
+    function spawnBall() {
+      // The 5 starting positions (The Launchers)
+      let spawnerPositions = [
+        "-8 1.6 -10", "-4 1.6 -10", "0 1.6 -10", "4 1.6 -10", "8 1.6 -10"
+      ];
+      // Pick a random launcher
+      let startPos = spawnerPositions[Math.floor(Math.random() * 5)];
+
+      // Create the dodgeball
+      let ball = document.createElement('a-sphere');
+      ball.setAttribute('radius', '0.5');
+      ball.setAttribute('src', '#ball-tex');
+      ball.setAttribute('class', 'clickable'); // Makes it gaze-interactable
+      ball.setAttribute('position', startPos);
+
+      // Animate the ball flying directly at the player's head (0, 1.6, 0)
+      ball.setAttribute('animation', `property: position; to: 0 1.6 0; dur: ${ballSpeed}; easing: linear;`);
+
+      // EVENT 1: Player successfully looks at the ball to "Block" it
+      ball.addEventListener('click', function() {
+        document.querySelector('#sfx-block').components.sound.playSound();
+        score += 10;
+        document.querySelector('#score-text').setAttribute('value', 'Score: ' + score);
+        
+        // Remove the ball from the scene
+        ball.parentNode.removeChild(ball);
+        
+        checkLevelProgression();
+      });
+
+      // EVENT 2: The animation finishes (meaning it reached the player's face without being blocked)
+      ball.addEventListener('animationcomplete', function() {
+        if (ball.parentNode) { // Check if it still exists (wasn't blocked)
+          document.querySelector('#sfx-hit').components.sound.playSound();
+          lives -= 1;
+          document.querySelector('#lives-text').setAttribute('value', 'Lives: ' + lives);
+          
+          ball.parentNode.removeChild(ball);
+
+          if (lives <= 0) {
+            document.querySelector('#level-text').setAttribute('value', 'GAME OVER');
+            document.querySelector('#level-text').setAttribute('color', 'red');
+            clearInterval(gameLoop); // Stop spawning balls
           }
-        });
-      }
-    });
+        }
+      });
 
-    // UI Logic
-    function showSetup() {
+      // Add the ball to the VR scene
+      document.querySelector('a-scene').appendChild(ball);
+    }
+
+    function checkLevelProgression() {
+      // Trigger Level 2 at 50 points
+      if (score === 50 && level === 1) {
+        level = 2;
+        document.querySelector('#level-text').setAttribute('value', 'Level: 2');
+        
+        // Level 2 Mechanics: Faster balls, more frequent spawns
+        ballSpeed = 2500; 
+        spawnRate = 1200; 
+        
+        // Restart the game loop with the new harder settings
+        clearInterval(gameLoop);
+        gameLoop = setInterval(spawnBall, spawnRate);
+      }
+    }
+
+    // UI Buttons
+    function goToSetup() {
       document.getElementById('flashscreen').classList.add('hidden');
       document.getElementById('setup').classList.remove('hidden');
     }
 
     function startGame() {
-      document.getElementById('ui-layer').classList.add('hidden');
-      
-      // Handle Setup Choices
-      let mute = document.getElementById('muteAudio').checked;
-      let level = document.getElementById('levelSelect').value;
-      
-      if (!mute) {
-        document.querySelector('#bgMusic').components.sound.playSound();
+      document.getElementById('ui-container').classList.add('hidden');
+      if (!document.getElementById('mute').checked) {
+        document.querySelector('#bgm').components.sound.playSound();
       }
-
-      // Handle Levels (e.g., changing tunnel color and speed based on level)
-      if (level === "2") {
-        document.querySelector('#tunnel').setAttribute('color', '#ff0055'); // Faster/harder visual cue
-        // In a full build, you'd spawn objects faster here
-      }
+      // Start throwing balls
+      gameLoop = setInterval(spawnBall, spawnRate);
     }
   </script>
 </head>
 <body>
 
-  <div id="ui-layer">
-    <div id="flashscreen" class="glass-panel">
-      <h1>Neon Apex</h1>
-      <p>A VR Experience by <strong>Chaudhry Sadiq</strong></p>
-      <p>CMPT 461: Immersive Computing</p>
-      <button onclick="showSetup()">Press to play</button>
+  <div id="ui-container">
+    <div id="flashscreen" class="panel">
+      <h1>VR DODGEBALL</h1>
+      <p>Developer: <strong>[Your Name]</strong></p>
+      <p>Course Info / Student ID</p>
+      <button onclick="goToSetup()">Next</button>
     </div>
 
-    <div id="setup" class="glass-panel hidden">
+    <div id="setup" class="panel hidden">
       <h2>Game Setup</h2>
-      <label><input type="checkbox" id="muteAudio"> Mute Background Music</label>
-      <label>Select Track: 
-        <select id="levelSelect" style="background:#000; color:#0ff; border:1px solid #0ff; padding:5px;">
-          <option value="1">Level 1 (Sector A)</option>
-          <option value="2">Level 2 (Sector B - Faster)</option>
-        </select>
-      </label>
-      <button onclick="startGame()">Enter VR</button>
+      <label style="font-size: 1.2rem;"><input type="checkbox" id="mute"> Mute Background Music</label><br>
+      <p><em>Look directly at the balls to block them!</em></p>
+      <button onclick="startGame()">Start Game</button>
     </div>
   </div>
 
-  <a-scene physics="gravity: 0; debug: false">
-    
+  <a-scene>
     <a-assets>
-      <img id="shipTexture" src="ship-texture.jpg"> 
-      <img id="ringTexture" src="assets/ring-texture.jpg">
-      <img id="tunnelTexture" src="assets/tunnel-texture.jpg">
+      <img id="floor-tex" src="floor-texture.jpg">
+      <img id="launcher-tex" src="launcher-texture.jpg">
+      <img id="ball-tex" src="ball-texture.jpg">
       
-      <audio id="music" src="assets/bg-music.mp3" preload="auto"></audio>
-      <audio id="sfx-ring" src="assets/ring-collect.mp3" preload="auto"></audio>
-      <audio id="sfx-crash" src="assets/crash.mp3" preload="auto"></audio>
+      <audio id="music" src="music.mp3"></audio>
+      <audio id="block" src="block.mp3"></audio>
+      <audio id="hit" src="hit.mp3"></audio>
     </a-assets>
 
-    <a-entity id="bgMusic" sound="src: #music; loop: true; volume: 0.5"></a-entity>
-    <a-entity id="ringSound" sound="src: #sfx-ring; volume: 1"></a-entity>
-    <a-entity id="crashSound" sound="src: #sfx-crash; volume: 1"></a-entity>
+    <a-entity id="bgm" sound="src: #music; loop: true; volume: 0.4"></a-entity>
+    <a-entity id="sfx-block" sound="src: #block; volume: 1"></a-entity>
+    <a-entity id="sfx-hit" sound="src: #hit; volume: 1"></a-entity>
 
-    <a-entity id="playerRig" position="0 1.6 0" 
-              animation="property: position; to: 0 1.6 -500; dur: 20000; easing: linear; loop: true"
-              gaze-steering collision-handler static-body="shape: sphere; sphereRadius: 0.5">
-      
-      <a-camera position="0 0 0" wasd-controls="enabled: false" look-controls="pointerLockEnabled: false">
+    <a-entity position="0 1.6 0">
+      <a-camera look-controls="pointerLockEnabled: false" wasd-controls="enabled: false">
         
-        <a-text id="scoreText" value="Score: 0" position="0 1.2 -2" color="#0ff" align="center" width="4"></a-text>
-        
-        <a-cone src="#shipTexture" position="0 -0.5 -1.5" rotation="90 0 0" radius-bottom="0.5" radius-top="0" height="1" color="#aaa"></a-cone>
+        <a-text id="score-text" value="Score: 0" position="-1.5 1.2 -2" color="#fff" width="4"></a-text>
+        <a-text id="level-text" value="Level: 1" position="0 1.2 -2" color="#ffff00" align="center" width="4"></a-text>
+        <a-text id="lives-text" value="Lives: 3" position="1.5 1.2 -2" color="#ff0000" align="right" width="4"></a-text>
+
+        <a-entity cursor="fuse: true; fuseTimeout: 300"
+                  raycaster="objects: .clickable"
+                  position="0 0 -1"
+                  geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.04"
+                  material="color: #00ffcc; shader: flat"
+                  animation__fusing="property: scale; startEvents: fusing; dur: 300; from: 1 1 1; to: 0.1 0.1 0.1"
+                  animation__mouseleave="property: scale; startEvents: mouseleave; dur: 100; to: 1 1 1">
+        </a-entity>
       </a-camera>
     </a-entity>
 
-    <a-cylinder id="tunnel" src="#tunnelTexture" radius="10" height="1000" rotation="90 0 0" position="0 0 -400" side="double" repeat="10 100"></a-cylinder>
+    <a-box src="#launcher-tex" position="-8 0.5 -10" height="3" width="1" depth="1"></a-box>
+    <a-box src="#launcher-tex" position="-4 0.5 -10" height="3" width="1" depth="1"></a-box>
+    <a-box src="#launcher-tex" position="0 0.5 -10" height="3" width="1" depth="1"></a-box>
+    <a-box src="#launcher-tex" position="4 0.5 -10" height="3" width="1" depth="1"></a-box>
+    <a-box src="#launcher-tex" position="8 0.5 -10" height="3" width="1" depth="1"></a-box>
 
-    <a-torus class="ring" src="#ringTexture" position="2 1.6 -20" color="#0f0" radius="1.5" tube="0.1" dynamic-body></a-torus>
-    <a-torus class="ring" src="#ringTexture" position="-2 1.6 -40" color="#0f0" radius="1.5" tube="0.1" dynamic-body></a-torus>
-    <a-torus class="ring" src="#ringTexture" position="0 1.6 -60" color="#0f0" radius="1.5" tube="0.1" dynamic-body></a-torus>
-
-    <a-box class="obstacle" position="0 1.6 -30" color="#f00" width="2" height="2" depth="2" dynamic-body></a-box>
-    <a-box class="obstacle" position="2 1.6 -50" color="#f00" width="2" height="2" depth="2" dynamic-body></a-box>
-
-    <a-light type="ambient" color="#222"></a-light>
-    <a-light type="point" color="#0ff" position="0 4 0" intensity="1.5"></a-light>
+    <a-plane src="#floor-tex" rotation="-90 0 0" width="30" height="30" repeat="10 10"></a-plane>
+    <a-sky color="#222"></a-sky>
 
   </a-scene>
 </body>
