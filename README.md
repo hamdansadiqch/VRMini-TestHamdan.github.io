@@ -8,7 +8,7 @@ Welcome to VR Gaze Dodgeball, a fast paced, hands free survival game built with 
 
 Since this is a web-based VR experience, no app store download or heavy installation is required. 
 
-1. **Host the Game:** Deploy the project directory containing `index.html` and the `assets/` folder to a web hosting service such as GitHub Pages.
+1. **Host the Game:** Deploy the project directory containing `individualproject.html` and the `assets/` folder to a web hosting service such as GitHub Pages.
 2. **Device Preparation:** Open the live URL on your mobile smartphone's web browser.
 3. **Permissions:** If your mobile browser prompts you, ensure you allow access to "Device Motion and Orientation Sensors" so the game can track your head movements.
 4. **Hardware:** Ensure your phone's screen auto-rotate is unlocked, turn the phone sideways landscape mode, and insert it securely into your mini VR glasses or Cardboard headset.
