@@ -124,14 +124,15 @@
 
   <a-scene>
     <a-assets>
-      <img id="floor-tex" src="floor-texture.jpg">
-      <img id="launcher-tex" src="launcher-texture.jpg">
-      <img id="ball-tex" src="ball-texture.jpg">
-      <img id="wall-tex" src="wall-texture.jpg">
+      <img id="floor-tex" src="assets/floor-texture.jpg">
+      <img id="launcher-tex" src="assets/launcher-texture.jpg">
+      <img id="ball-tex" src="assets/ball-texture.jpg">
+      <img id="wall-tex" src="assets/wall-texture.jpg">
+      <img id="ceiling-tex" src="assets/ceiling-texture.jpg">
       
-      <audio id="music" src="music.mp3"></audio>
-      <audio id="block" src="block.mp3"></audio>
-      <audio id="hit" src="hit.mp3"></audio>
+      <audio id="music" src="assets/music.mp3"></audio>
+      <audio id="block" src="assets/block.mp3"></audio>
+      <audio id="hit" src="assets/hit.mp3"></audio>
     </a-assets>
 
     <a-entity id="bgm" sound="src: #music; loop: true; volume: 0.4"></a-entity>
@@ -169,7 +170,9 @@
     <a-plane src="#wall-tex" position="-15 5 0" width="30" height="10" rotation="0 90 0" repeat="8 3"></a-plane>
     <a-plane src="#wall-tex" position="15 5 0" width="30" height="10" rotation="0 -90 0" repeat="8 3"></a-plane>
 
-    <a-sky color="#0a0a0a"></a-sky>
+    <a-plane src="#ceiling-tex" position="0 10 0" rotation="90 0 0" width="30" height="30" repeat="10 10"></a-plane>
+
+    <a-sky color="#000"></a-sky>
 
   </a-scene>
 </body>
