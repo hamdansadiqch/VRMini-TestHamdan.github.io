@@ -28,7 +28,8 @@ Since this is a web-based VR experience, no app store download or heavy installa
 This game uses **100% hands-free gaze controls**. You do not need a bluetooth controller.
 
 * **Aiming:** You have a cyan targeting ring (reticle) permanently locked to the center of your vision. To move it, physically turn your head to look around the room.
-* **Defending (Collision):** Five robotic launchers surround you in the gym. They will periodically fire red dodgeballs directly at your head. **To block a ball, you must look directly at it.** * **The Block (Fuse):** Hovering your cyan reticle over an incoming ball for 0.3 seconds will successfully deflect it. You will hear a block sound effect and gain 10 points. 
+* **Defending (Collision):** Five robotic launchers surround you in the gym. They will periodically fire red dodgeballs directly at your head. **To block a ball, you must look directly at it.**
+* **The Block (Fuse):** Hovering your cyan reticle over an incoming ball for 0.3 seconds will successfully deflect it. You will hear a block sound effect and gain 10 points. 
 * **Taking Damage:** If a ball reaches your camera position without being blocked, you will hear a "thud" sound and lose 1 Life. 
 
 ---
